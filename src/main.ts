@@ -1,15 +1,18 @@
 import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App } from "obsidian";
 
 type Fallback = "recent" | "alphabetical" | "none";
+type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
 
 interface FolderIndexSettings {
 	fallback: Fallback;
+	emptyFolderBehavior: EmptyFolderBehavior;
 	allowFolderToggle: boolean;
 	strictMatching: boolean;
 }
 
 const DEFAULT_SETTINGS: FolderIndexSettings = {
 	fallback: "recent",
+	emptyFolderBehavior: "none",
 	allowFolderToggle: true,
 	strictMatching: false,
 };
@@ -141,6 +144,18 @@ export default class FolderIndexPlugin extends Plugin {
 		const index = this.getIndexNote(folder);
 		if (index) return index;
 
+		const directFiles = this.getMarkdownFiles(folder);
+		if (directFiles.length === 0) {
+			switch (this.settings.emptyFolderBehavior) {
+				case "recent_recursive":
+					return this.getMostRecentRecursive(folder);
+				case "recent_index":
+					return this.getMostRecentSubfolderIndex(folder);
+				case "none":
+					return null;
+			}
+		}
+
 		switch (this.settings.fallback) {
 			case "alphabetical":
 				return this.getAlphabeticalFirst(folder);
@@ -187,6 +202,38 @@ export default class FolderIndexPlugin extends Plugin {
 		return files[0];
 	}
 
+	private getMarkdownFilesRecursive(folder: TFolder): TFile[] {
+		const files: TFile[] = [];
+		for (const child of folder.children) {
+			if (child instanceof TFile && child.extension === "md") {
+				files.push(child);
+			} else if (child instanceof TFolder) {
+				files.push(...this.getMarkdownFilesRecursive(child));
+			}
+		}
+		return files;
+	}
+
+	private getMostRecentRecursive(folder: TFolder): TFile | null {
+		const files = this.getMarkdownFilesRecursive(folder);
+		if (files.length === 0) return null;
+		files.sort((a, b) => b.stat.mtime - a.stat.mtime);
+		return files[0];
+	}
+
+	private getMostRecentSubfolderIndex(folder: TFolder): TFile | null {
+		const indices: TFile[] = [];
+		for (const child of folder.children) {
+			if (child instanceof TFolder) {
+				const index = this.getIndexNote(child);
+				if (index) indices.push(index);
+			}
+		}
+		if (indices.length === 0) return null;
+		indices.sort((a, b) => b.stat.mtime - a.stat.mtime);
+		return indices[0];
+	}
+
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
@@ -226,6 +273,21 @@ class FolderIndexSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.fallback)
 					.onChange(async (value) => {
 						this.plugin.settings.fallback = value as Fallback;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Nested folder behavior")
+			.setDesc("What to open when a folder contains only subfolders (no direct notes)")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("recent_index", "Recently edited index")
+					.addOption("recent_recursive", "Recently edited note")
+					.addOption("none", "Nothing")
+					.setValue(this.plugin.settings.emptyFolderBehavior)
+					.onChange(async (value) => {
+						this.plugin.settings.emptyFolderBehavior = value as EmptyFolderBehavior;
 						await this.plugin.saveSettings();
 					})
 			);
