@@ -8,6 +8,7 @@ interface FolderIndexSettings {
 	emptyFolderBehavior: EmptyFolderBehavior;
 	allowFolderToggle: boolean;
 	strictMatching: boolean;
+	keyword: string;
 }
 
 const DEFAULT_SETTINGS: FolderIndexSettings = {
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: FolderIndexSettings = {
 	emptyFolderBehavior: "none",
 	allowFolderToggle: true,
 	strictMatching: false,
+	keyword: "index",
 };
 
 export default class FolderIndexPlugin extends Plugin {
@@ -173,17 +175,19 @@ export default class FolderIndexPlugin extends Plugin {
 	}
 
 	private getIndexNote(folder: TFolder): TFile | null {
+		const keyword = this.settings.keyword.toLowerCase();
+
 		if (this.settings.strictMatching) {
-			const path = `${folder.path}/index.md`;
+			const path = `${folder.path}/${keyword}.md`;
 			const file = this.app.vault.getAbstractFileByPath(path);
 			return file instanceof TFile ? file : null;
 		}
 
 		const files = this.getMarkdownFiles(folder);
-		const exact = files.find((f) => f.basename.toLowerCase() === "index");
+		const exact = files.find((f) => f.basename.toLowerCase() === keyword);
 		if (exact) return exact;
 		const partial = files.find((f) =>
-			f.basename.toLowerCase().includes("index")
+			f.basename.toLowerCase().includes(keyword)
 		);
 		return partial ?? null;
 	}
@@ -293,8 +297,23 @@ class FolderIndexSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Keyword")
+			.setDesc("The keyword to match when looking for index notes")
+			.addText((text) =>
+				text
+					.setPlaceholder("index")
+					.setValue(this.plugin.settings.keyword)
+					.onChange(async (value) => {
+						const trimmed = value.trim().toLowerCase();
+						if (trimmed.length < 3) return;
+						this.plugin.settings.keyword = trimmed;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
 			.setName("Strict matching")
-			.setDesc("Only match notes titled exactly \"index\". When off, any note containing \"index\" in the title will be used.")
+			.setDesc(`Only match notes titled exactly "${this.plugin.settings.keyword}". When off, any note containing "${this.plugin.settings.keyword}" in the title will be used.`)
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.strictMatching)
