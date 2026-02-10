@@ -13,7 +13,7 @@ interface QuickerFoldersSettings {
 
 const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 	fallback: "recent",
-	emptyFolderBehavior: "none",
+	emptyFolderBehavior: "recent_index",
 	allowFolderToggle: true,
 	strictMatching: false,
 	keyword: "index",
