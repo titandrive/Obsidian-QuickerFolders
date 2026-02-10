@@ -12,6 +12,7 @@ When you click a folder name, FolderIndex opens a note from that folder. If ther
   - *Most recent* — The most recently edited note
   - *Topmost* — The first note alphabetically
   - *Nothing* — Do nothing
+- **Strict Matching** - Whether it will open any not containing "index" in the title, or whether it has to be titled exactly `index.md`. Defaulted to off.
 - **Allow folder toggle** — Whether clicking a folder name expands/collapses it. When disabled, only the arrow icon toggles folders.
 
 ## Installation
@@ -31,8 +32,3 @@ BRAT will now automatically keep track of updates for you
 1. Browse to FolderIndex [Releases](https://github.com/titandrive/folderindex/releases)
 2. Download the latest release
 3. Extract the release and copy it to your obsidian vault: `.../MyVault/.obsidian/plugins/FolderIndex`
-
-## Support
-
-- [GitHub](https://github.com/titandrive/FolderIndex)
-- [Ko-fi](https://ko-fi.com/titandrive)

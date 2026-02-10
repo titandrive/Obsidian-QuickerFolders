@@ -5,11 +5,13 @@ type Fallback = "recent" | "alphabetical" | "none";
 interface FolderIndexSettings {
 	fallback: Fallback;
 	allowFolderToggle: boolean;
+	strictMatching: boolean;
 }
 
 const DEFAULT_SETTINGS: FolderIndexSettings = {
 	fallback: "alphabetical",
 	allowFolderToggle: true,
+	strictMatching: false,
 };
 
 export default class FolderIndexPlugin extends Plugin {
@@ -87,9 +89,19 @@ export default class FolderIndexPlugin extends Plugin {
 	}
 
 	private getIndexNote(folder: TFolder): TFile | null {
-		const path = `${folder.path}/index.md`;
-		const file = this.app.vault.getAbstractFileByPath(path);
-		return file instanceof TFile ? file : null;
+		if (this.settings.strictMatching) {
+			const path = `${folder.path}/index.md`;
+			const file = this.app.vault.getAbstractFileByPath(path);
+			return file instanceof TFile ? file : null;
+		}
+
+		const files = this.getMarkdownFiles(folder);
+		const exact = files.find((f) => f.basename.toLowerCase() === "index");
+		if (exact) return exact;
+		const partial = files.find((f) =>
+			f.basename.toLowerCase().includes("index")
+		);
+		return partial ?? null;
 	}
 
 	private getAlphabeticalFirst(folder: TFolder): TFile | null {
@@ -145,6 +157,18 @@ class FolderIndexSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.fallback)
 					.onChange(async (value) => {
 						this.plugin.settings.fallback = value as Fallback;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Strict matching")
+			.setDesc("Only match notes titled exactly \"index\". When off, any note containing \"index\" in the title will be used.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.strictMatching)
+					.onChange(async (value) => {
+						this.plugin.settings.strictMatching = value;
 						await this.plugin.saveSettings();
 					})
 			);
