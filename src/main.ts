@@ -3,7 +3,7 @@ import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App } from "obsidian
 type Fallback = "recent" | "alphabetical" | "none";
 type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
 
-interface FolderIndexSettings {
+interface QuickerFoldersSettings {
 	fallback: Fallback;
 	emptyFolderBehavior: EmptyFolderBehavior;
 	allowFolderToggle: boolean;
@@ -11,7 +11,7 @@ interface FolderIndexSettings {
 	keyword: string;
 }
 
-const DEFAULT_SETTINGS: FolderIndexSettings = {
+const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 	fallback: "recent",
 	emptyFolderBehavior: "none",
 	allowFolderToggle: true,
@@ -19,8 +19,8 @@ const DEFAULT_SETTINGS: FolderIndexSettings = {
 	keyword: "index",
 };
 
-export default class FolderIndexPlugin extends Plugin {
-	settings: FolderIndexSettings = DEFAULT_SETTINGS;
+export default class QuickerFoldersPlugin extends Plugin {
+	settings: QuickerFoldersSettings = DEFAULT_SETTINGS;
 	private clickHandler: ((evt: MouseEvent) => void) | null = null;
 	private preventToggleHandler: ((evt: Event) => void) | null = null;
 	private blockToggle = false;
@@ -28,7 +28,7 @@ export default class FolderIndexPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-		this.addSettingTab(new FolderIndexSettingTab(this.app, this));
+		this.addSettingTab(new QuickerFoldersSettingTab(this.app, this));
 		this.registerFolderClickHandler();
 		this.patchFileExplorer();
 	}
@@ -247,10 +247,10 @@ export default class FolderIndexPlugin extends Plugin {
 	}
 }
 
-class FolderIndexSettingTab extends PluginSettingTab {
-	plugin: FolderIndexPlugin;
+class QuickerFoldersSettingTab extends PluginSettingTab {
+	plugin: QuickerFoldersPlugin;
 
-	constructor(app: App, plugin: FolderIndexPlugin) {
+	constructor(app: App, plugin: QuickerFoldersPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -260,7 +260,7 @@ class FolderIndexSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		const descEl = containerEl.createEl("p", {
-			text: "Opens a note when you click on a folder. If a folder contains an index.md, it will always be opened first.",
+			text: "Quicker Folders is a simple Obsidian plugin that automatically opens a selected note when you click on a folder in the filetree.",
 		});
 		descEl.style.paddingLeft = "var(--size-4-2)";
 

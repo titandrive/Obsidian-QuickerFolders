@@ -1,5 +1,5 @@
 {
-  "name": "folder-index",
+  "name": "quicker-folders",
   "version": "0.5.1",
   "description": "Obsidian plugin that opens a note when clicking a folder",
   "scripts": {
