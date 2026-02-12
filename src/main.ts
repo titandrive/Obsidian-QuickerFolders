@@ -9,6 +9,7 @@ interface QuickerFoldersSettings {
 	allowFolderToggle: boolean;
 	strictMatching: boolean;
 	keyword: string;
+	showRibbonButton: boolean;
 }
 
 const DEFAULT_SETTINGS: QuickerFoldersSettings = {
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 	allowFolderToggle: true,
 	strictMatching: false,
 	keyword: "index",
+	showRibbonButton: true,
 };
 
 export default class QuickerFoldersPlugin extends Plugin {
@@ -25,6 +27,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 	private preventToggleHandler: ((evt: Event) => void) | null = null;
 	private blockToggle = false;
 	private unpatchFn: (() => void) | null = null;
+	private ribbonEl: HTMLElement | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -42,7 +45,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 				this.app.fileManager.processFrontMatter(file, (fm) => {
 					fm.index_note = true;
 				});
-				new Notice(`Set "${file.basename}" as folder index`);
+				new Notice(`Set "${file.basename}" as index note`);
 				return true;
 			},
 		});
@@ -59,10 +62,12 @@ export default class QuickerFoldersPlugin extends Plugin {
 				this.app.fileManager.processFrontMatter(file, (fm) => {
 					delete fm.index_note;
 				});
-				new Notice(`Removed "${file.basename}" as folder index`);
+				new Notice(`Removed "${file.basename}" as index note`);
 				return true;
 			},
 		});
+
+		this.updateRibbonButton();
 
 		this.registerEvent(
 			this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
@@ -79,7 +84,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 								this.app.fileManager.processFrontMatter(file, (fm) => {
 									delete fm.index_note;
 								});
-								new Notice(`Removed "${file.basename}" as folder index`);
+								new Notice(`Removed "${file.basename}" as index note`);
 							});
 					});
 				} else {
@@ -90,7 +95,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 								this.app.fileManager.processFrontMatter(file, (fm) => {
 									fm.index_note = true;
 								});
-								new Notice(`Set "${file.basename}" as folder index`);
+								new Notice(`Set "${file.basename}" as index note`);
 							});
 					});
 				}
@@ -104,6 +109,34 @@ export default class QuickerFoldersPlugin extends Plugin {
 			this.unpatchFn();
 			this.unpatchFn = null;
 		}
+	}
+
+	updateRibbonButton() {
+		if (this.ribbonEl) {
+			this.ribbonEl.remove();
+			this.ribbonEl = null;
+		}
+		if (!this.settings.showRibbonButton) return;
+
+		this.ribbonEl = this.addRibbonIcon("pin", "Toggle index note", () => {
+			const file = this.app.workspace.getActiveFile();
+			if (!file) {
+				new Notice("No active note");
+				return;
+			}
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (cache?.frontmatter?.index_note === true) {
+				this.app.fileManager.processFrontMatter(file, (fm) => {
+					delete fm.index_note;
+				});
+				new Notice(`Removed "${file.basename}" as index note`);
+			} else {
+				this.app.fileManager.processFrontMatter(file, (fm) => {
+					fm.index_note = true;
+				});
+				new Notice(`Set "${file.basename}" as index note`);
+			}
+		});
 	}
 
 	private patchFileExplorer() {
@@ -440,6 +473,19 @@ class QuickerFoldersSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.allowFolderToggle = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Show ribbon button")
+			.setDesc("Show a button in the ribbon to toggle index note on the active file")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.showRibbonButton)
+					.onChange(async (value) => {
+						this.plugin.settings.showRibbonButton = value;
+						await this.plugin.saveSettings();
+						this.plugin.updateRibbonButton();
 					})
 			);
 
