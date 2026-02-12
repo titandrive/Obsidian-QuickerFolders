@@ -8,7 +8,7 @@ Do you frequently find yourself clicking through your obsidian filetree just to 
 
 When you click on a folder, Quicker Folders opens a selected note from that folder. If there is a note titled `index` it will open that note. If an index note does not exist, you can set it to instead open the topmost note or the most recently edited note.
 
-If you do not wish to declare an index via a title, you can also do so via front matter: `index_note: true`. This can also be quickly accomplishedvia the Command Pallete: `Quicker Folders: Quicker Folders: Set current note as index`. 
+If you do not wish to declare an index via a title, you can also do so via front matter: `index_note: true`. This can be quickly accomplishedvia the Command Pallete: `Quicker Folders: Quicker Folders: Set current note as index` or via right click menu. 
 
 *Note: any notes with the frontmatter declaration will always take precedence over notes with "index" in their titles".*
 

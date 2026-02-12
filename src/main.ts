@@ -1,4 +1,4 @@
-import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice } from "obsidian";
+import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile } from "obsidian";
 
 type Fallback = "recent" | "alphabetical" | "none";
 type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
@@ -63,6 +63,39 @@ export default class QuickerFoldersPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
+				if (!(file instanceof TFile) || file.extension !== "md") return;
+
+				const cache = this.app.metadataCache.getFileCache(file);
+				const isIndex = cache?.frontmatter?.index_note === true;
+
+				if (isIndex) {
+					menu.addItem((item) => {
+						item.setTitle("Remove index note")
+							.setIcon("x-circle")
+							.onClick(() => {
+								this.app.fileManager.processFrontMatter(file, (fm) => {
+									delete fm.index_note;
+								});
+								new Notice(`Removed "${file.basename}" as folder index`);
+							});
+					});
+				} else {
+					menu.addItem((item) => {
+						item.setTitle("Set index note")
+							.setIcon("pin")
+							.onClick(() => {
+								this.app.fileManager.processFrontMatter(file, (fm) => {
+									fm.index_note = true;
+								});
+								new Notice(`Set "${file.basename}" as folder index`);
+							});
+					});
+				}
+			})
+		);
 	}
 
 	onunload() {
