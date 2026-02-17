@@ -1,6 +1,6 @@
 {
   "name": "quicker-folders",
-  "version": "0.5.5",
+  "version": "0.5.7",
   "description": "Obsidian plugin that opens a note when clicking a folder",
   "scripts": {
     "dev": "node esbuild.config.mjs",

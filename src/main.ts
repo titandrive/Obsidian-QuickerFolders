@@ -1,4 +1,4 @@
-import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile } from "obsidian";
+import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile, setIcon } from "obsidian";
 
 type Fallback = "recent" | "alphabetical" | "none";
 type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
@@ -28,6 +28,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 	private blockToggle = false;
 	private unpatchFn: (() => void) | null = null;
 	private ribbonEl: HTMLElement | null = null;
+	private currentIconName: string = "";
 
 	async onload() {
 		await this.loadSettings();
@@ -118,7 +119,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 		}
 		if (!this.settings.showRibbonButton) return;
 
-		this.ribbonEl = this.addRibbonIcon("pin", "Toggle index note", () => {
+		this.ribbonEl = this.addRibbonIcon("pin", "Set index note", () => {
 			const file = this.app.workspace.getActiveFile();
 			if (!file) {
 				new Notice("No active note");
@@ -136,7 +137,24 @@ export default class QuickerFoldersPlugin extends Plugin {
 				});
 				new Notice(`Set "${file.basename}" as index note`);
 			}
+			this.updateRibbonIcon();
 		});
+
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateRibbonIcon()));
+		this.registerEvent(this.app.metadataCache.on("changed", () => this.updateRibbonIcon()));
+		this.updateRibbonIcon();
+	}
+
+	private updateRibbonIcon() {
+		if (!this.ribbonEl) return;
+		const file = this.app.workspace.getActiveFile();
+		const isIndex = file ? this.app.metadataCache.getFileCache(file)?.frontmatter?.index_note === true : false;
+		const iconName = isIndex ? "pin-off" : "pin";
+		if (iconName !== this.currentIconName) {
+			setIcon(this.ribbonEl, iconName);
+			this.currentIconName = iconName;
+		}
+		this.ribbonEl.setAttribute("aria-label", isIndex ? "Remove index note" : "Set index note");
 	}
 
 	private patchFileExplorer() {
