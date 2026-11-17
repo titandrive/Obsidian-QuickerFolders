@@ -26,6 +26,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 	private clickHandler: ((evt: MouseEvent) => void) | null = null;
 	private preventToggleHandler: ((evt: Event) => void) | null = null;
 	private blockToggle = false;
+	private unblockTimer = 0;
 	private unpatchFn: (() => void) | null = null;
 	private ribbonEl: HTMLElement | null = null;
 	private currentIconName: string = "";
@@ -192,15 +193,27 @@ export default class QuickerFoldersPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(doPatch);
 	}
 
+	/**
+	 * Whether a click on a folder row is meant for the expand/collapse arrow. The arrow icon itself is
+	 * small, so anything from the row's left edge to just past the arrow counts as the arrow too;
+	 * otherwise a slightly-off click opens the index note instead of toggling.
+	 */
+	private isArrowClick(evt: MouseEvent | PointerEvent, folderTitle: Element): boolean {
+		const target = evt.target as HTMLElement;
+		if (target.closest(".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon")) return true;
+		const arrow = folderTitle.querySelector(".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon");
+		if (!arrow || typeof evt.clientX !== "number") return false;
+		const box = arrow.getBoundingClientRect();
+		return box.width > 0 && evt.clientX <= box.right + 6;
+	}
+
 	private registerFolderClickHandler() {
 		this.clickHandler = (evt: MouseEvent) => {
 			const target = evt.target as HTMLElement;
 			const folderTitle = target.closest(".nav-folder-title");
 			if (!folderTitle) return;
 
-			const clickedArrow = target.closest(
-				".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon"
-			);
+			const clickedArrow = this.isArrowClick(evt, folderTitle);
 
 			const folderPath = folderTitle.getAttribute("data-path");
 			if (!folderPath) return;
@@ -229,12 +242,15 @@ export default class QuickerFoldersPlugin extends Plugin {
 			const folderTitle = target.closest(".nav-folder-title");
 			if (!folderTitle) return;
 
-			const clickedArrow = target.closest(
-				".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon"
-			);
-			if (clickedArrow) return;
+			// The arrow always toggles, and pressing it clears any leftover block.
+			if (this.isArrowClick(evt as MouseEvent, folderTitle)) { this.blockToggle = false; return; }
 
 			this.blockToggle = true;
+			// Clear the block on our own too: if the press doesn't end in a click on the name (released
+			// elsewhere, dragged), the click handler never runs, and the block would stay on, making
+			// every later expand/collapse, arrow included, silently do nothing.
+			window.clearTimeout(this.unblockTimer);
+			this.unblockTimer = window.setTimeout(() => { this.blockToggle = false; }, 400);
 			evt.stopImmediatePropagation();
 			evt.preventDefault();
 		};
