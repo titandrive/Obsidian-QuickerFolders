@@ -1,5 +1,5 @@
 /* FolderIndex */
-.qf-index-icon { display: inline-flex; align-items: center; margin-inline-end: var(--size-2-2); color: var(--icon-color); flex-shrink: 0; }
+.qf-index-icon { display: inline-flex; align-items: center; margin-inline-end: var(--size-2-2); color: inherit; flex-shrink: 0; }
 .qf-index-icon svg { width: var(--icon-xs); height: var(--icon-xs); }
 .qf-icon-preview { display: inline-flex; color: var(--icon-color); }
 .qf-icon-preview svg { width: var(--icon-s); height: var(--icon-s); }
