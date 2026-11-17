@@ -286,8 +286,8 @@ export default class QuickerFoldersPlugin extends Plugin {
 			const folder = this.app.vault.getAbstractFileByPath(folderPath);
 			if (!(folder instanceof TFolder)) return;
 
-			// The same light tap Obsidian gives its own toggles (it routes this to the phone's haptics).
-			if (this.settings.haptics && Platform.isMobile) navigator.vibrate?.(100);
+			// A short, light tap (Obsidian routes navigator.vibrate to the phone's haptics).
+			if (this.settings.haptics && Platform.isMobile) navigator.vibrate?.(20);
 
 			if (!clickedArrow) {
 				const note = this.resolveNote(folder);
