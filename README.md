@@ -16,6 +16,8 @@ Bases (`.base` files) can be index notes too: right-click a base and choose **Se
 
 Each folder's index note (or base) gets an icon beside its name in the file explorer. Turn it off or pick a different icon (searchable, pin by default) in settings.
 
+On mobile, tapping a folder or its arrow gives a light haptic tap, like Obsidian's own toggles. Turn it off with **Haptic feedback** in settings (shown on mobile only).
+
 Additionally, you can set it so clicking on a folder opens your index note but keeps the folder closed. This can be helpful if you have a folder full of notes but only need to view your index note on a freqent basic.
 
 ### Example

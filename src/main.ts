@@ -1,4 +1,4 @@
-import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile, setIcon, getIconIds, debounce, FuzzySuggestModal, FuzzyMatch } from "obsidian";
+import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile, setIcon, getIconIds, debounce, FuzzySuggestModal, FuzzyMatch, Platform } from "obsidian";
 
 type Fallback = "recent" | "alphabetical" | "none";
 type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
@@ -10,6 +10,8 @@ interface QuickerFoldersSettings {
 	strictMatching: boolean;
 	keyword: string;
 	showRibbonButton: boolean;
+	/** On mobile, a light haptic tap when a folder is tapped or expanded/collapsed. */
+	haptics: boolean;
 	/** Index files that can't hold an index_note property (bases), by path. */
 	indexFiles: string[];
 	/** Show an icon beside each folder's index note in the file explorer. */
@@ -24,6 +26,7 @@ const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 	strictMatching: false,
 	keyword: "index",
 	showRibbonButton: true,
+	haptics: true,
 	indexFiles: [],
 	showIndexIcon: true,
 	indexIcon: "pin",
@@ -282,6 +285,9 @@ export default class QuickerFoldersPlugin extends Plugin {
 
 			const folder = this.app.vault.getAbstractFileByPath(folderPath);
 			if (!(folder instanceof TFolder)) return;
+
+			// The same light tap Obsidian gives its own toggles (it routes this to the phone's haptics).
+			if (this.settings.haptics && Platform.isMobile) navigator.vibrate?.(100);
 
 			if (!clickedArrow) {
 				const note = this.resolveNote(folder);
@@ -606,6 +612,20 @@ class QuickerFoldersSettingTab extends PluginSettingTab {
 					}).open();
 				});
 			});
+		}
+
+		if (Platform.isMobile) {
+			new Setting(containerEl)
+				.setName("Haptic feedback")
+				.setDesc("A light tap when you tap a folder or expand/collapse it.")
+				.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings.haptics)
+						.onChange(async (value) => {
+							this.plugin.settings.haptics = value;
+							await this.plugin.saveSettings();
+						})
+				);
 		}
 
 		new Setting(containerEl)
