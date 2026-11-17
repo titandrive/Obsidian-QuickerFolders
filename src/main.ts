@@ -1,4 +1,4 @@
-import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile, setIcon } from "obsidian";
+import { Plugin, PluginSettingTab, Setting, TFile, TFolder, App, Notice, Menu, TAbstractFile, setIcon, getIconIds, debounce, FuzzySuggestModal, FuzzyMatch } from "obsidian";
 
 type Fallback = "recent" | "alphabetical" | "none";
 type EmptyFolderBehavior = "recent_recursive" | "recent_index" | "none";
@@ -10,6 +10,11 @@ interface QuickerFoldersSettings {
 	strictMatching: boolean;
 	keyword: string;
 	showRibbonButton: boolean;
+	/** Index files that can't hold an index_note property (bases), by path. */
+	indexFiles: string[];
+	/** Show an icon beside each folder's index note in the file explorer. */
+	showIndexIcon: boolean;
+	indexIcon: string;
 }
 
 const DEFAULT_SETTINGS: QuickerFoldersSettings = {
@@ -19,7 +24,15 @@ const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 	strictMatching: false,
 	keyword: "index",
 	showRibbonButton: true,
+	indexFiles: [],
+	showIndexIcon: true,
+	indexIcon: "pin",
 };
+
+const INDEX_ICON_CLASS = "qf-index-icon";
+
+/** File types that can be an index: notes (flagged in frontmatter) and bases (flagged in settings). */
+const INDEX_EXTENSIONS = ["md", "base"];
 
 export default class QuickerFoldersPlugin extends Plugin {
 	settings: QuickerFoldersSettings = DEFAULT_SETTINGS;
@@ -30,6 +43,8 @@ export default class QuickerFoldersPlugin extends Plugin {
 	private unpatchFn: (() => void) | null = null;
 	private ribbonEl: HTMLElement | null = null;
 	private currentIconName: string = "";
+	/** Redraw the index icons in the file explorer, at most every 150 ms. */
+	refreshIndexIcons = debounce(() => this.drawIndexIcons(), 150, true);
 
 	async onload() {
 		await this.loadSettings();
@@ -42,12 +57,9 @@ export default class QuickerFoldersPlugin extends Plugin {
 			name: "Set current note as index",
 			checkCallback: (checking: boolean) => {
 				const file = this.app.workspace.getActiveFile();
-				if (!file) return false;
+				if (!file || !this.canBeIndex(file)) return false;
 				if (checking) return true;
-				this.app.fileManager.processFrontMatter(file, (fm) => {
-					fm.index_note = true;
-				});
-				new Notice(`Set "${file.basename}" as index note`);
+				void this.setIndex(file, true);
 				return true;
 			},
 		});
@@ -57,56 +69,60 @@ export default class QuickerFoldersPlugin extends Plugin {
 			name: "Remove current note as index",
 			checkCallback: (checking: boolean) => {
 				const file = this.app.workspace.getActiveFile();
-				if (!file) return false;
-				const cache = this.app.metadataCache.getFileCache(file);
-				if (!cache?.frontmatter?.index_note) return false;
+				if (!file || !this.isIndex(file)) return false;
 				if (checking) return true;
-				this.app.fileManager.processFrontMatter(file, (fm) => {
-					delete fm.index_note;
-				});
-				new Notice(`Removed "${file.basename}" as index note`);
+				void this.setIndex(file, false);
 				return true;
 			},
 		});
 
 		this.updateRibbonButton();
 
+		// Index icons in the file explorer follow anything that can change which file is a folder's index.
+		this.app.workspace.onLayoutReady(() => this.refreshIndexIcons());
+		this.registerEvent(this.app.workspace.on("layout-change", () => this.refreshIndexIcons()));
+		this.registerEvent(this.app.metadataCache.on("changed", () => this.refreshIndexIcons()));
+		this.registerEvent(this.app.vault.on("create", () => this.refreshIndexIcons()));
+		this.registerEvent(this.app.vault.on("rename", () => this.refreshIndexIcons()));
+		this.registerEvent(this.app.vault.on("delete", () => this.refreshIndexIcons()));
+
 		this.registerEvent(
 			this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
-				if (!(file instanceof TFile) || file.extension !== "md") return;
+				if (!(file instanceof TFile) || !this.canBeIndex(file)) return;
 
-				const cache = this.app.metadataCache.getFileCache(file);
-				const isIndex = cache?.frontmatter?.index_note === true;
-
-				if (isIndex) {
+				if (this.isIndex(file)) {
 					menu.addItem((item) => {
 						item.setTitle("Remove index note")
 							.setIcon("x-circle")
-							.onClick(() => {
-								this.app.fileManager.processFrontMatter(file, (fm) => {
-									delete fm.index_note;
-								});
-								new Notice(`Removed "${file.basename}" as index note`);
-							});
+							.onClick(() => void this.setIndex(file, false));
 					});
 				} else {
 					menu.addItem((item) => {
 						item.setTitle("Set index note")
 							.setIcon("pin")
-							.onClick(() => {
-								this.app.fileManager.processFrontMatter(file, (fm) => {
-									fm.index_note = true;
-								});
-								new Notice(`Set "${file.basename}" as index note`);
-							});
+							.onClick(() => void this.setIndex(file, true));
 					});
 				}
 			})
 		);
+
+		// Keep bases flagged as index files when they're renamed or moved, and forget deleted ones.
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			const i = this.settings.indexFiles.indexOf(oldPath);
+			if (i === -1) return;
+			this.settings.indexFiles[i] = file.path;
+			void this.saveSettings();
+		}));
+		this.registerEvent(this.app.vault.on("delete", (file) => {
+			if (!this.settings.indexFiles.includes(file.path)) return;
+			this.settings.indexFiles = this.settings.indexFiles.filter((p) => p !== file.path);
+			void this.saveSettings();
+		}));
 	}
 
 	onunload() {
 		this.removeFolderClickHandler();
+		document.querySelectorAll("." + INDEX_ICON_CLASS).forEach((el) => el.remove());
 		if (this.unpatchFn) {
 			this.unpatchFn();
 			this.unpatchFn = null;
@@ -122,23 +138,11 @@ export default class QuickerFoldersPlugin extends Plugin {
 
 		this.ribbonEl = this.addRibbonIcon("pin", "Set index note", () => {
 			const file = this.app.workspace.getActiveFile();
-			if (!file) {
+			if (!file || !this.canBeIndex(file)) {
 				new Notice("No active note");
 				return;
 			}
-			const cache = this.app.metadataCache.getFileCache(file);
-			if (cache?.frontmatter?.index_note === true) {
-				this.app.fileManager.processFrontMatter(file, (fm) => {
-					delete fm.index_note;
-				});
-				new Notice(`Removed "${file.basename}" as index note`);
-			} else {
-				this.app.fileManager.processFrontMatter(file, (fm) => {
-					fm.index_note = true;
-				});
-				new Notice(`Set "${file.basename}" as index note`);
-			}
-			this.updateRibbonIcon();
+			void this.setIndex(file, !this.isIndex(file));
 		});
 
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateRibbonIcon()));
@@ -149,13 +153,71 @@ export default class QuickerFoldersPlugin extends Plugin {
 	private updateRibbonIcon() {
 		if (!this.ribbonEl) return;
 		const file = this.app.workspace.getActiveFile();
-		const isIndex = file ? this.app.metadataCache.getFileCache(file)?.frontmatter?.index_note === true : false;
+		const isIndex = file ? this.isIndex(file) : false;
 		const iconName = isIndex ? "pin-off" : "pin";
 		if (iconName !== this.currentIconName) {
 			setIcon(this.ribbonEl, iconName);
 			this.currentIconName = iconName;
 		}
 		this.ribbonEl.setAttribute("aria-label", isIndex ? "Remove index note" : "Set index note");
+	}
+
+	canBeIndex(file: TFile): boolean {
+		return INDEX_EXTENSIONS.includes(file.extension);
+	}
+
+	/** Notes are flagged with index_note in their frontmatter; bases have none, so they're listed in settings. */
+	isIndex(file: TFile): boolean {
+		if (file.extension === "md") return this.app.metadataCache.getFileCache(file)?.frontmatter?.index_note === true;
+		return this.settings.indexFiles.includes(file.path);
+	}
+
+	async setIndex(file: TFile, on: boolean): Promise<void> {
+		if (file.extension === "md") {
+			await this.app.fileManager.processFrontMatter(file, (fm) => {
+				if (on) fm.index_note = true;
+				else delete fm.index_note;
+			});
+		} else {
+			const others = this.settings.indexFiles.filter((p) => p !== file.path);
+			this.settings.indexFiles = on ? [...others, file.path] : others;
+			await this.saveSettings();
+		}
+		new Notice(on ? `Set "${file.basename}" as index note` : `Removed "${file.basename}" as index note`);
+		this.updateRibbonIcon();
+		this.refreshIndexIcons();
+	}
+
+	/** Every folder's index note (set as index, or matching the keyword), by path. */
+	private indexPaths(): Set<string> {
+		const paths = new Set<string>();
+		const walk = (folder: TFolder) => {
+			const index = this.getIndexNote(folder);
+			if (index) paths.add(index.path);
+			for (const child of folder.children) if (child instanceof TFolder) walk(child);
+		};
+		walk(this.app.vault.getRoot());
+		return paths;
+	}
+
+	/** Put the index icon before the name of each index note in the file explorer, and nowhere else. */
+	private drawIndexIcons() {
+		const paths = this.settings.showIndexIcon ? this.indexPaths() : new Set<string>();
+		for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
+			const items = (leaf.view as any)?.fileItems as Record<string, { selfEl?: HTMLElement; innerEl?: HTMLElement }> | undefined;
+			if (!items) continue;
+			for (const [path, item] of Object.entries(items)) {
+				const self = item.selfEl;
+				if (!self) continue;
+				const existing = self.querySelector(":scope > ." + INDEX_ICON_CLASS) as HTMLElement | null;
+				if (!paths.has(path)) { existing?.remove(); continue; }
+				if (existing?.dataset.icon === this.settings.indexIcon) continue;
+				existing?.remove();
+				const icon = createSpan({ cls: INDEX_ICON_CLASS, attr: { "aria-label": "Index note", "data-icon": this.settings.indexIcon } });
+				setIcon(icon, this.settings.indexIcon);
+				self.insertBefore(icon, item.innerEl ?? self.firstChild);
+			}
+		}
 	}
 
 	private patchFileExplorer() {
@@ -224,7 +286,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 			if (!clickedArrow) {
 				const note = this.resolveNote(folder);
 				if (note) {
-					this.app.workspace.openLinkText(note.path, "", false);
+					void this.app.workspace.getLeaf(false).openFile(note);
 				}
 			}
 
@@ -325,13 +387,10 @@ export default class QuickerFoldersPlugin extends Plugin {
 	}
 
 	private getIndexNote(folder: TFolder): TFile | null {
-		// Frontmatter index: true takes priority over everything
+		// A note or base set as index takes priority over everything
+		const flagged = folder.children.find((f): f is TFile => f instanceof TFile && this.canBeIndex(f) && this.isIndex(f));
+		if (flagged) return flagged;
 		const files = this.getMarkdownFiles(folder);
-		const frontmatterIndex = files.find((f) => {
-			const cache = this.app.metadataCache.getFileCache(f);
-			return cache?.frontmatter?.index_note === true;
-		});
-		if (frontmatterIndex) return frontmatterIndex;
 
 		const keyword = this.settings.keyword.toLowerCase();
 
@@ -397,6 +456,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings.indexFiles = [...(this.settings.indexFiles ?? [])];
 	}
 
 	async saveSettings() {
@@ -511,6 +571,44 @@ class QuickerFoldersSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Show index icon")
+			.setDesc("Show an icon beside each folder's index note (or base) in the file explorer.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.showIndexIcon)
+					.onChange(async (value) => {
+						this.plugin.settings.showIndexIcon = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshIndexIcons();
+						this.display();
+					})
+			);
+
+		if (this.plugin.settings.showIndexIcon) {
+			const iconSetting = new Setting(containerEl)
+				.setName("Index icon")
+				.setDesc("The icon shown beside index notes.");
+			iconSetting.addButton((button) => {
+				const draw = () => {
+					button.buttonEl.empty();
+					const icon = button.buttonEl.createSpan({ cls: "qf-icon-preview" });
+					setIcon(icon, this.plugin.settings.indexIcon);
+					button.buttonEl.createSpan({ text: this.plugin.settings.indexIcon });
+				};
+				draw();
+				button.buttonEl.addClass("qf-icon-button");
+				button.onClick(() => {
+					new IconPickerModal(this.app, async (name) => {
+						this.plugin.settings.indexIcon = name;
+						await this.plugin.saveSettings();
+						this.plugin.refreshIndexIcons();
+						draw();
+					}).open();
+				});
+			});
+		}
+
+		new Setting(containerEl)
 			.setName("Show ribbon button")
 			.setDesc("Show a button in the ribbon to toggle index note on the active file")
 			.addToggle((toggle) =>
@@ -544,5 +642,32 @@ class QuickerFoldersSettingTab extends PluginSettingTab {
 					window.open("https://ko-fi.com/titandrive");
 				})
 			);
+	}
+}
+
+/** Search every icon Obsidian has by name, showing each one beside its name. */
+class IconPickerModal extends FuzzySuggestModal<string> {
+	constructor(app: App, private onPick: (name: string) => void) {
+		super(app);
+		this.setPlaceholder("Search icons…");
+		this.modalEl.addClass("qf-icon-picker");
+	}
+
+	getItems(): string[] {
+		return getIconIds().map((id) => id.replace(/^lucide-/, "")).sort();
+	}
+
+	getItemText(name: string): string {
+		return name.replace(/-/g, " ");
+	}
+
+	renderSuggestion(match: FuzzyMatch<string>, el: HTMLElement): void {
+		el.addClass("qf-icon-suggestion");
+		setIcon(el.createSpan({ cls: "qf-icon-preview" }), match.item);
+		super.renderSuggestion(match, el.createSpan());
+	}
+
+	onChooseItem(name: string): void {
+		this.onPick(name);
 	}
 }

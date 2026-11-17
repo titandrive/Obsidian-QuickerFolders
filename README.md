@@ -12,6 +12,10 @@ If you do not wish to declare an index via a title, you can also do so via front
 
 *Note: any notes with the frontmatter declaration will always take precedence over notes with "index" in their titles".*
 
+Bases (`.base` files) can be index notes too: right-click a base and choose **Set index note**, or use the command or ribbon button while it's open. Bases have no front matter, so Quicker Folders remembers them in its settings and keeps track when they're renamed or moved.
+
+Each folder's index note (or base) gets an icon beside its name in the file explorer. Turn it off or pick a different icon (searchable, pin by default) in settings.
+
 Additionally, you can set it so clicking on a folder opens your index note but keeps the folder closed. This can be helpful if you have a folder full of notes but only need to view your index note on a freqent basic.
 
 ### Example
