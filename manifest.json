@@ -1,7 +1,7 @@
 {
   "id": "quicker-folders",
   "name": "Quicker Folders",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "minAppVersion": "0.15.0",
   "description": "Automatically opens a note when you click on a folder in the file explorer.",
   "author": "TitanDrive",

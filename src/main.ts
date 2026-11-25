@@ -12,7 +12,7 @@ interface QuickerFoldersSettings {
 	showRibbonButton: boolean;
 	/** On mobile, a light haptic tap when a folder is tapped or expanded/collapsed. */
 	haptics: boolean;
-	/** Index files that can't hold an index_note property (bases), by path. */
+	/** Index files that can't hold an index_note property (bases and canvases), by path. */
 	indexFiles: string[];
 	/** Show an icon beside each folder's index note in the file explorer. */
 	showIndexIcon: boolean;
@@ -34,8 +34,8 @@ const DEFAULT_SETTINGS: QuickerFoldersSettings = {
 
 const INDEX_ICON_CLASS = "qf-index-icon";
 
-/** File types that can be an index: notes (flagged in frontmatter) and bases (flagged in settings). */
-const INDEX_EXTENSIONS = ["md", "base"];
+/** File types that can be an index: notes (flagged in frontmatter), and bases and canvases (flagged in settings). */
+const INDEX_EXTENSIONS = ["md", "base", "canvas"];
 
 export default class QuickerFoldersPlugin extends Plugin {
 	settings: QuickerFoldersSettings = DEFAULT_SETTINGS;
@@ -109,7 +109,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 			})
 		);
 
-		// Keep bases flagged as index files when they're renamed or moved, and forget deleted ones.
+		// Keep bases and canvases flagged as index files when they're renamed or moved, and forget deleted ones.
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
 			const i = this.settings.indexFiles.indexOf(oldPath);
 			if (i === -1) return;
@@ -169,7 +169,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 		return INDEX_EXTENSIONS.includes(file.extension);
 	}
 
-	/** Notes are flagged with index_note in their frontmatter; bases have none, so they're listed in settings. */
+	/** Notes are flagged with index_note in their frontmatter; bases and canvases have none, so they're listed in settings. */
 	isIndex(file: TFile): boolean {
 		if (file.extension === "md") return this.app.metadataCache.getFileCache(file)?.frontmatter?.index_note === true;
 		return this.settings.indexFiles.includes(file.path);
@@ -393,7 +393,7 @@ export default class QuickerFoldersPlugin extends Plugin {
 	}
 
 	private getIndexNote(folder: TFolder): TFile | null {
-		// A note or base set as index takes priority over everything
+		// A note, base or canvas set as index takes priority over everything
 		const flagged = folder.children.find((f): f is TFile => f instanceof TFile && this.canBeIndex(f) && this.isIndex(f));
 		if (flagged) return flagged;
 		const files = this.getMarkdownFiles(folder);
@@ -578,7 +578,7 @@ class QuickerFoldersSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Show index icon")
-			.setDesc("Show an icon beside each folder's index note (or base) in the file explorer.")
+			.setDesc("Show an icon beside each folder's index note (or base or canvas) in the file explorer.")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.showIndexIcon)

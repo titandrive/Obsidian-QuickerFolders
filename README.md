@@ -12,9 +12,9 @@ If you do not wish to declare an index via a title, you can also do so via front
 
 *Note: any notes with the frontmatter declaration will always take precedence over notes with "index" in their titles".*
 
-Bases (`.base` files) can be index notes too: right-click a base and choose **Set index note**, or use the command or ribbon button while it's open. Bases have no front matter, so Quicker Folders remembers them in its settings and keeps track when they're renamed or moved.
+Bases (`.base` files) and canvases (`.canvas` files) can be index notes too: right-click one and choose **Set index note**, or use the command or ribbon button while it's open. They have no front matter, so Quicker Folders remembers them in its settings and keeps track when they're renamed or moved.
 
-Each folder's index note (or base) gets an icon beside its name in the file explorer. Turn it off or pick a different icon (searchable, pin by default) in settings.
+Each folder's index note (or base or canvas) gets an icon beside its name in the file explorer. Turn it off or pick a different icon (searchable, pin by default) in settings.
 
 On mobile, tapping a folder or its arrow gives a light haptic tap, like Obsidian's own toggles. Turn it off with **Haptic feedback** in settings (shown on mobile only).
 
